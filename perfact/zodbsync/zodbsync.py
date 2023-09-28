@@ -6,6 +6,8 @@ import six
 import shutil
 import time  # for periodic output
 import sys
+import json
+import subprocess
 
 # for using an explicit transaction manager
 import transaction
@@ -74,7 +76,8 @@ def mod_read(obj=None, onerrorstop=False, default_owner=None,
     # The title should always be readable
     title = getattr(obj, 'title', None)
     # see comment in helpers.py:str_repr for why we convert to string
-    meta['title'] = to_string(title)
+    if isinstance(title, (six.binary_type, six.text_type)):
+        meta['title'] = to_string(title)
 
     # Generic and meta type dependent handlers
 
@@ -751,6 +754,12 @@ class ZODBSync:
             txn_mgr.abort()
         else:
             txn_mgr.commit()
+            postproc = self.config.get('run_after_playback', None)
+            if postproc and os.path.isfile(postproc):
+                self.logger.info('Calling postprocessing script ' + postproc)
+                proc = subprocess.Popen(postproc, stdin=subprocess.PIPE,
+                                        universal_newlines=True)
+                proc.communicate(json.dumps({'paths': paths}))
 
     def recent_changes(self, since_secs=None, txnid=None, limit=50,
                        search_limit=100):
